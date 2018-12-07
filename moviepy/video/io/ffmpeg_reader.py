@@ -197,6 +197,8 @@ class FFMPEG_VideoReader:
 
         if self.buffer_all:
             self.pos = pos
+            if self.pos >= len(self.buffer):
+                return self.buffer[len(self.buffer) - 1]
             return self.buffer[pos]
 
         # Initialize proc if it is not open

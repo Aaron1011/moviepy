@@ -217,10 +217,24 @@ class FFMPEG_AudioReader:
                 self.buffer_around(fr_max)
 
             if self.buffer_all:
-                #print("Frames: ", frames, frames - self.buffer_startframe)
-                result = np.zeros((len(tt),self.nchannels))
-                result[in_time] = self.full_buffer[frames]
-                return result
+                try:
+                    #print("Frames: ", frames, frames - self.buffer_startframe)
+                    result = np.zeros((len(tt),self.nchannels))
+                    indices = frames
+                    result[in_time] = self.full_buffer[indices]
+                    return result
+
+                except IndexError as error:
+                    warnings.warn("Error in file %s, "%(self.filename)+
+                           "At time t=%.02f-%.02f seconds, "%(tt[0], tt[-1])+
+                           "indices wanted: %d-%d, "%(indices.min(), indices.max())+
+                           "but len(buffer)=%d\n"%(len(self.buffer))+ str(error),
+                       UserWarning)
+
+                    # repeat the last frame instead
+                    indices[indices>=len(self.full_buffer)] = len(self.full_buffer) -1
+                    result[in_time] = self.full_buffer[indices]
+                    return result
                 #return self.full_buffer[fr_min:(fr_max+1)]
 
             try:
@@ -265,6 +279,11 @@ class FFMPEG_AudioReader:
         Fills the buffer with frames, centered on ``framenumber``
         if possible
         """
+
+
+        if self.buffer_all:
+            self.buffer = []
+            return
 
         # start-frame for the buffer
         new_bufferstart = max(0,  framenumber - self.buffersize // 2)
