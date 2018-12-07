@@ -295,6 +295,7 @@ class CompositeAudioClip(AudioClip):
         def make_frame(t):
             
             played_parts = [c.is_playing(t) for c in self.clips]
+            #print("Played parts: ", played_parts)
             
             sounds = [c.get_frame(t - c.start)*np.array([part]).T
                       for c, part in zip(self.clips, played_parts)

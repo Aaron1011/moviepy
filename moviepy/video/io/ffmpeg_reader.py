@@ -25,10 +25,11 @@ class FFMPEG_VideoReader:
     def __init__(self, filename, print_infos=False, bufsize = None,
                  pix_fmt="rgb24", check_duration=True,
                  target_resolution=None, resize_algo='bicubic',
-                 fps_source='tbr'):
+                 fps_source='tbr', buffer_all=False):
 
         self.filename = filename
         self.proc = None
+        self.buffer_all = buffer_all
         infos = ffmpeg_parse_infos(filename, print_infos, check_duration,
                                    fps_source)
         self.fps = infos['video_fps']
@@ -66,6 +67,7 @@ class FFMPEG_VideoReader:
             bufsize = self.depth * w * h + 100
 
         self.bufsize= bufsize
+        self.buffer = None
         self.initialize()
 
 
@@ -103,9 +105,33 @@ class FFMPEG_VideoReader:
 
         self.proc = sp.Popen(cmd, **popen_params)
 
+        if self.buffer_all:
+            print("Reading FFMPEG video output: ", cmd)
+            out, err = self.proc.communicate()
+            if len(err) != 0:
+                raise IOError("MoviePY error: error reading from FFMPEG: ", err)
+            print("Done reading!")
+
+            w, h = self.size
+            frame_size = int(self.depth*w*h)
+
+            if len(out) % frame_size != 0:
+                raise IOError(("Expected total size to be a multiple of %s, but"
+                " got %s") % (frame_size, len(out)))
+
+            buf = np.fromstring(out, dtype='uint8')
+            # Our buffer is an array of (out / frame_size) frames,
+            buf.shape = (len(out) // frame_size, h, w, int(self.depth))
+            self.buffer = buf
+
 
     def skip_frames(self, n=1):
         """Reads and throws away n frames """
+
+        if self.buffer_all:
+            self.pos += n
+            return
+
         w, h = self.size
         for i in range(n):
             self.proc.stdout.read(self.depth*w*h)
@@ -114,6 +140,9 @@ class FFMPEG_VideoReader:
 
 
     def read_frame(self):
+        if self.buffer_all:
+            return None
+
         w, h = self.size
         nbytes= self.depth*w*h
 
@@ -165,6 +194,10 @@ class FFMPEG_VideoReader:
         # case where you get the nth frame by writing get_frame(n/fps).
 
         pos = int(self.fps*t + 0.00001)+1
+
+        if self.buffer_all:
+            self.pos = pos
+            return self.buffer[pos]
 
         # Initialize proc if it is not open
         if not self.proc:

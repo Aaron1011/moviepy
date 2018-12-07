@@ -39,9 +39,11 @@ class FFMPEG_AudioReader:
     """
 
     def __init__(self, filename, buffersize, print_infos=False,
-                 fps=44100, nbytes=2, nchannels=2):
+                 fps=44100, nbytes=2, nchannels=2, buffer_all=False):
 
         self.filename = filename
+        self.buffer_all = buffer_all
+        self.full_buffer = None
         self.nbytes = nbytes
         self.fps = fps
         self.f = 's%dle'%(8*nbytes)
@@ -98,9 +100,31 @@ class FFMPEG_AudioReader:
 
         self.pos = np.round(self.fps*starttime)
 
+        if self.buffer_all:
+            print("Reading FFMPEG audio output: ", cmd)
+            out, err = self.proc.communicate()
+            if len(err) != 0:
+                raise IOError("Moviepy error: error reading from FFMPEG audio"
+                        ": ", err)
+
+            #L = self.nchannels*chunksize*self.nbytes
+            dt = {1: 'int8',2:'int16',4:'int32'}[self.nbytes]
+            result = np.fromstring(out, dtype=dt)
+            result = (1.0*result / 2**(8*self.nbytes-1)).\
+                                 reshape((int(len(result)/self.nchannels),
+                                          self.nchannels))
+
+            self.full_buffer = result
+
+
+
 
 
     def skip_chunk(self,chunksize):
+        if self.buffer_all:
+            self.pos = self.pos + chunksize
+            return
+
         s = self.proc.stdout.read(self.nchannels*chunksize*self.nbytes)
         self.proc.stdout.flush()
         self.pos = self.pos+chunksize
@@ -108,6 +132,11 @@ class FFMPEG_AudioReader:
 
 
     def read_chunk(self,chunksize):
+        if self.buffer_all:
+            buf = self.full_buffer[self.pos:self.pos+chunksize]
+            self.pos += chunksize
+            return buf
+
         # chunksize is not being autoconverted from float to int
         chunksize = int(round(chunksize))
         L = self.nchannels*chunksize*self.nbytes
@@ -131,6 +160,11 @@ class FFMPEG_AudioReader:
         arbitrary frames whenever possible, by moving between adjacent
         frames.
         """
+
+        if self.buffer_all:
+            self.pos = pos
+            return
+
         if (pos < self.pos) or (pos> (self.pos+1000000)):
             t = 1.0*pos/self.fps
             self.initialize(t)
@@ -182,6 +216,13 @@ class FFMPEG_AudioReader:
                              < len(self.buffer)):
                 self.buffer_around(fr_max)
 
+            if self.buffer_all:
+                #print("Frames: ", frames, frames - self.buffer_startframe)
+                result = np.zeros((len(tt),self.nchannels))
+                result[in_time] = self.full_buffer[frames]
+                return result
+                #return self.full_buffer[fr_min:(fr_max+1)]
+
             try:
                 result = np.zeros((len(tt),self.nchannels))
                 indices = frames - self.buffer_startframe
@@ -207,6 +248,9 @@ class FFMPEG_AudioReader:
             ind = int(self.fps*tt)
             if ind<0 or ind> self.nframes: # out of time: return 0
                 return np.zeros(self.nchannels)
+
+            if self.buffer_all:
+                return self.full_buffer[ind]
 
             if not (0 <= (ind - self.buffer_startframe) <len(self.buffer)):
                 # out of the buffer: recenter the buffer

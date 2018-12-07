@@ -345,6 +345,7 @@ class Clip:
             result = 1 * (t >= self.start)
             if self.end is not None:
                 result *= (t <= self.end)
+            #print("Result: ", result)
             return result
 
         else:

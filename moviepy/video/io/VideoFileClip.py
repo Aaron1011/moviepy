@@ -79,7 +79,7 @@ class VideoFileClip(VideoClip):
                  audio=True, audio_buffersize=200000,
                  target_resolution=None, resize_algorithm='bicubic',
                  audio_fps=44100, audio_nbytes=2, verbose=False,
-                 fps_source='tbr'):
+                 fps_source='tbr', buffer_all=False):
 
         VideoClip.__init__(self)
 
@@ -88,7 +88,8 @@ class VideoFileClip(VideoClip):
         self.reader = FFMPEG_VideoReader(filename, pix_fmt=pix_fmt,
                                          target_resolution=target_resolution,
                                          resize_algo=resize_algorithm,
-                                         fps_source=fps_source)
+                                         fps_source=fps_source,
+                                         buffer_all=buffer_all)
 
         # Make some of the reader's attributes accessible from the clip
         self.duration = self.reader.duration
@@ -118,7 +119,8 @@ class VideoFileClip(VideoClip):
             self.audio = AudioFileClip(filename,
                                        buffersize=audio_buffersize,
                                        fps=audio_fps,
-                                       nbytes=audio_nbytes)
+                                       nbytes=audio_nbytes,
+                                       buffer_all=buffer_all)
 
     def close(self):
         """ Close the internal reader. """
